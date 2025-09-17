@@ -30,18 +30,18 @@ public class Engine {
     private double lastMouseX, lastMouseY;
     private boolean firstMouse = true;
 
-    private final float cameraSpeed = 12f;
+    private final float cameraSpeed = 19f;
     private final float mouseSensitivity = 0.1f;
 
     // Engine.java
     private float velocityY = 0.0f;
     private final float gravity = -38f;
-    private final float jumpStrength = 20f;
+    private final float jumpStrength = 27f;
     private boolean isGrounded = false;
 
     private GameObject groundObj = null; // объект, на котором стоит игрок
 
-    private Vector3f playerSize = new Vector3f(0.1f, 1.5f, 0.1f); // ширина, высота, глубина
+    private Vector3f playerSize = new Vector3f(0.1f, 4f, 0.1f); // ширина, высота, глубина
 
     public Node root;
     public Light mainLight;
@@ -228,6 +228,8 @@ public class Engine {
     private void processInput(float deltaTime) {
         long win = window.getWindowHandle();
 
+
+
         // направления
         Vector3f front = camera.getFront();
         Vector3f right = front.cross(new Vector3f(0, 1, 0), new Vector3f()).normalize();
@@ -260,11 +262,7 @@ public class Engine {
         // позиция после движения
         Vector3f newPos = new Vector3f(pos);
 
-        // респавн
-        if (glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS) {
-            newPos.set(0, 60, 0);
-            velocityY = 0;
-        }
+
 
         // движение по X
         newPos.x += moveDir.x * deltaTime;
@@ -296,7 +294,16 @@ public class Engine {
             }
         }
 
+        // респавн
+        if (glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS) {
+            newPos.set(0, 60, 0);
+            velocityY = 0;
+        }
+
         camera.getPosition().set(newPos.x, newPos.y + 2, newPos.z);
+
+
+
 
         // выход
         if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS) {

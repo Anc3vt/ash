@@ -267,14 +267,15 @@ public class Engine {
         // движение по X
         newPos.x += moveDir.x * deltaTime;
         if (checkCollision(newPos)) {
-            if (!tryStepUp(newPos, pos)) newPos.x = pos.x;
+            if (!tryStepUp(newPos, pos, moveDir)) newPos.x = pos.x;
         }
 
-        // движение по Z
+// движение по Z
         newPos.z += moveDir.z * deltaTime;
         if (checkCollision(newPos)) {
-            if (!tryStepUp(newPos, pos)) newPos.z = pos.z;
+            if (!tryStepUp(newPos, pos, moveDir)) newPos.z = pos.z;
         }
+
 
         // движение по Y
         newPos.y += moveDir.y * deltaTime;
@@ -334,20 +335,26 @@ public class Engine {
     }
 
 
-    private boolean tryStepUp(Vector3f newPos, Vector3f oldPos) {
-        float originalY = newPos.y;
+    private boolean tryStepUp(Vector3f pos, Vector3f oldPos, Vector3f moveDir) {
+        float maxStep = stepHeight; // высота ступеньки
+        float stepIncrement = 0.05f; // шаг проверки
+        Vector3f testPos = new Vector3f(pos);
 
-        // пробуем приподняться на высоту до stepHeight
-        for (float dy = 0.05f; dy <= stepHeight; dy += 0.05f) {
-            newPos.y = oldPos.y + dy;
-            if (!checkCollision(newPos)) {
-                return true; // нашли место для подъёма
+        for (float dy = stepIncrement; dy <= maxStep; dy += stepIncrement) {
+            testPos.set(pos.x, oldPos.y + dy, pos.z);
+
+            // пробуем применить и Y, и X/Z
+            testPos.add(new Vector3f(moveDir.x, 0, moveDir.z).mul(0.02f));
+
+            if (!checkCollision(testPos)) {
+                pos.set(testPos);
+                return true; // нашли куда шагнуть
             }
         }
 
-        newPos.y = originalY;
         return false;
     }
+
 
 
     private boolean checkCollision(Vector3f newPos) {

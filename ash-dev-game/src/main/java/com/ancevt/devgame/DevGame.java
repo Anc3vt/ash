@@ -10,6 +10,7 @@ import com.ancevt.ash.engine.core.LaunchConfig;
 import com.ancevt.ash.engine.render.ShaderProgram;
 import com.ancevt.ash.engine.scene.*;
 import com.ancevt.ash.engine.util.TextLoader;
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.util.List;
@@ -72,7 +73,7 @@ public class DevGame implements Application {
                 15,   // глубина,
                 15,// этажи
                 3f, // размер куба
-                3.1f, // высота этажа
+                4f, // высота этажа
                 groundTex,
                 wallTex
         );
@@ -91,7 +92,7 @@ public class DevGame implements Application {
     ) {
         boolean[][][] maze = new boolean[mazeWidth][mazeDepth][mazeLevels];
 
-        // генерируем этажи
+        // === Генерация всех уровней ===
         for (int y = 0; y < mazeLevels; y++) {
             boolean[][] level = generateMaze(mazeWidth, mazeDepth);
 
@@ -101,7 +102,7 @@ public class DevGame implements Application {
                 }
             }
 
-            // лестница между этажами (обеспечиваем проход вниз/вверх)
+            // Добавляем лестницу (пробиваем проход между этажами)
             if (y < mazeLevels - 1) {
                 int stairX = 1 + (int) (Math.random() * (mazeWidth - 2));
                 int stairZ = 1 + (int) (Math.random() * (mazeDepth - 2));
@@ -110,14 +111,16 @@ public class DevGame implements Application {
             }
         }
 
+        // === Билдеры для объединённой геометрии ===
         MeshBuilder wallBuilder = new MeshBuilder(8);
         MeshBuilder groundBuilder = new MeshBuilder(8);
 
         List<AABB> wallColliders = new java.util.ArrayList<>();
         List<AABB> groundColliders = new java.util.ArrayList<>();
 
-        float holeChance = 0.3f; // шанс дырки
+        float holeChance = 0.3f; // шанс дырки в полу
 
+        // === Проходим по всем клеткам ===
         for (int y = 0; y < mazeLevels; y++) {
             for (int x = 0; x < mazeWidth; x++) {
                 for (int z = 0; z < mazeDepth; z++) {
@@ -126,36 +129,15 @@ public class DevGame implements Application {
                     float posY = y * levelHeight;
                     float posZ = z * cubeSize - mazeDepth * cubeSize / 2;
 
-                    // === стена ===
+                    // === Стены ===
                     if (maze[x][z][y]) {
-                        Mesh cubeMesh = MeshFactory.createTexturedCubeMesh(cubeSize);
-                        GameObjectNode wallNode = new GameObjectNode(cubeMesh, wallTex);
+                        wallBuilder.addMesh(
+                                MeshFactory.createTexturedCubeMesh(cubeSize),
+                                posX,
+                                posY + cubeSize / 2, // центр куба
+                                posZ
+                        );
 
-                        // базовая позиция
-                        float offsetX = posX;
-                        float offsetY = posY + cubeSize / 2;
-                        float offsetZ = posZ;
-
-                        // шанс 10% на кривой куб
-                        if (Math.random() < 0.1) {
-                            // небольшие смещения по X/Z (±10% от размера куба)
-                            float randomOffsetX = (float) ((Math.random() - 0.5) * cubeSize * 0.2f);
-                            float randomOffsetZ = (float) ((Math.random() - 0.5) * cubeSize * 0.2f);
-
-                            // наклон до ±5 градусов
-                            float randomRotX = (float) ((Math.random() - 0.5) * 10.0);
-                            float randomRotZ = (float) ((Math.random() - 0.5) * 10.0);
-
-                            wallNode.setPosition(offsetX + randomOffsetX, offsetY, offsetZ + randomOffsetZ);
-                            wallNode.setRotation(randomRotX, 0, randomRotZ);
-                        } else {
-                            // обычный ровный куб
-                            wallNode.setPosition(offsetX, offsetY, offsetZ);
-                        }
-
-                        ctx.getEngine().root.addChild(wallNode);
-
-                        // коллайдер всегда прямой куб
                         Vector3f min = new Vector3f(
                                 posX - cubeSize / 2,
                                 posY,
@@ -169,40 +151,31 @@ public class DevGame implements Application {
                         wallColliders.add(new AABB(min, max));
                     }
 
-
-                    // === пол ===
                     if (Math.random() > holeChance) {
                         float thickness = cubeSize * 0.1f;
-                        Mesh tileMesh = MeshFactory.createFloorTileMesh(cubeSize, thickness);
-                        GameObjectNode tileNode = new GameObjectNode(tileMesh, groundTex);
 
-                        // базовая позиция
-                        float offsetX = posX;
-                        float offsetY = posY - thickness / 2;
-                        float offsetZ = posZ;
+                        // === случайные углы наклона ===
+                        float rx = (float) Math.toRadians((Math.random() - 0.5) * 10); // -5°..+5°
+                        float rz = (float) Math.toRadians((Math.random() - 0.5) * 10);
 
-                        // небольшие смещения по Y
-                        float randomYOffset = (float) ((Math.random() - 0.5) * cubeSize * 0.1f);
-                        offsetY += randomYOffset;
+                        Matrix4f transform = new Matrix4f()
+                                .translate(posX, posY - thickness / 2, posZ)
+                                .rotateX(rx)
+                                .rotateZ(rz);
 
-                        // случайные наклоны (до ±5°)
-                        float randomRotX = (float) ((Math.random() - 0.5) * 10.0);
-                        float randomRotZ = (float) ((Math.random() - 0.5) * 10.0);
+                        groundBuilder.addMeshTransformed(
+                                MeshFactory.createFloorTileMesh(cubeSize, thickness),
+                                transform
+                        );
 
-                        tileNode.setPosition(offsetX, offsetY, offsetZ);
-                        tileNode.setRotation(randomRotX, 0, randomRotZ);
-
-                        ctx.getEngine().root.addChild(tileNode);
-
-                        // коллайдеры — под плитку как будто она всё равно плоская
                         Vector3f min = new Vector3f(
                                 posX - cubeSize / 2,
-                                offsetY - thickness,
+                                posY - thickness,
                                 posZ - cubeSize / 2
                         );
                         Vector3f max = new Vector3f(
                                 posX + cubeSize / 2,
-                                offsetY + thickness,
+                                posY + thickness,
                                 posZ + cubeSize / 2
                         );
                         groundColliders.add(new AABB(min, max));
@@ -212,17 +185,17 @@ public class DevGame implements Application {
             }
         }
 
+        // === Финализируем меши ===
         Mesh wallMesh = wallBuilder.build();
         Mesh groundMesh = groundBuilder.build();
 
-// стены со своими коллизиями
         MazeNode mazeNode = new MazeNode(wallMesh, wallTex, wallColliders);
-// пол со своими коллизиями
         MazeNode groundNode = new MazeNode(groundMesh, groundTex, groundColliders);
 
         ctx.getEngine().root.addChild(groundNode);
         ctx.getEngine().root.addChild(mazeNode);
     }
+
 
 
     private boolean[][] generateMaze(int width, int height) {

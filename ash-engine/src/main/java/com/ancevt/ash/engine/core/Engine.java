@@ -30,18 +30,18 @@ public class Engine {
     private double lastMouseX, lastMouseY;
     private boolean firstMouse = true;
 
-    private final float cameraSpeed = 5f;
+    private final float cameraSpeed = 12f;
     private final float mouseSensitivity = 0.1f;
 
     // Engine.java
     private float velocityY = 0.0f;
-    private final float gravity = -58f;
-    private final float jumpStrength = 30f;
+    private final float gravity = -38f;
+    private final float jumpStrength = 20f;
     private boolean isGrounded = false;
 
     private GameObject groundObj = null; // объект, на котором стоит игрок
 
-    private Vector3f playerSize = new Vector3f(0.1f, 1.2f, 0.1f); // ширина, высота, глубина
+    private Vector3f playerSize = new Vector3f(0.1f, 1.5f, 0.1f); // ширина, высота, глубина
 
     public Node root;
     public Light mainLight;

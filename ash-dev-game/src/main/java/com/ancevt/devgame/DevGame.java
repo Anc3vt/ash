@@ -69,11 +69,11 @@ public class DevGame implements Application {
         // === Генерация многоэтажного лабиринта ===
         generateMultiFloorMaze(
                 ctx,
-                5,   // ширина
-                15,   // глубина,
-                5,// этажи
+                20,   // ширина
+                20,   // глубина,
+                20,// этажи
                 8f, // размер куба
-                8.3f, // высота этажа
+                8.5f, // высота этажа
                 groundTex,
                 wallTex
         );
@@ -102,7 +102,39 @@ public class DevGame implements Application {
                 }
             }
 
-            // Добавляем лестницу (пробиваем проход между этажами)
+            // === Добавляем много комнат (пустых пространств) ===
+            int roomsCount = 1 + (int)(Math.random() * 3); // 1–3 комнаты на этаж
+            for (int r = 0; r < roomsCount; r++) {
+                int roomX = 1 + (int)(Math.random() * (mazeWidth - 6));
+                int roomZ = 1 + (int)(Math.random() * (mazeDepth - 6));
+                int roomW = 3 + (int)(Math.random() * 5); // ширина 3–7
+                int roomH = 3 + (int)(Math.random() * 5); // глубина 3–7
+
+                for (int rx = roomX; rx < roomX + roomW && rx < mazeWidth - 1; rx++) {
+                    for (int rz = roomZ; rz < roomZ + roomH && rz < mazeDepth - 1; rz++) {
+                        maze[rx][rz][y] = false;
+                    }
+                }
+            }
+
+            // === Добавляем атриумы (многоуровневые пустоты) ===
+            if (Math.random() < 0.4 && y < mazeLevels - 2) { // чаще (40%)
+                int atriumX = 2 + (int)(Math.random() * (mazeWidth - 6));
+                int atriumZ = 2 + (int)(Math.random() * (mazeDepth - 6));
+                int atriumW = 2 + (int)(Math.random() * 5); // ширина 2–6
+                int atriumH = 2 + (int)(Math.random() * 5); // глубина 2–6
+                int atriumLevels = 2 + (int)(Math.random() * 3); // высота 2–4 этажей
+
+                for (int ay = y; ay < y + atriumLevels && ay < mazeLevels; ay++) {
+                    for (int ax = atriumX; ax < atriumX + atriumW && ax < mazeWidth - 1; ax++) {
+                        for (int az = atriumZ; az < atriumZ + atriumH && az < mazeDepth - 1; az++) {
+                            maze[ax][az][ay] = false;
+                        }
+                    }
+                }
+            }
+
+            // === Добавляем лестницу (пробиваем проход между этажами) ===
             if (y < mazeLevels - 1) {
                 int stairX = 1 + (int) (Math.random() * (mazeWidth - 2));
                 int stairZ = 1 + (int) (Math.random() * (mazeDepth - 2));
@@ -151,6 +183,7 @@ public class DevGame implements Application {
                         wallColliders.add(new AABB(min, max));
                     }
 
+                    // === Пол ===
                     if (Math.random() > holeChance) {
                         float thickness = cubeSize * 0.1f;
 
@@ -180,7 +213,6 @@ public class DevGame implements Application {
                         );
                         groundColliders.add(new AABB(min, max));
                     }
-
                 }
             }
         }

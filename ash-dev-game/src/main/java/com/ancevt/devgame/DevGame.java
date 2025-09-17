@@ -68,9 +68,9 @@ public class DevGame implements Application {
         // === Генерация многоэтажного лабиринта ===
         generateMultiFloorMaze(
                 ctx,
-                5,   // ширина
-                5,   // глубина,
-                10,// этажи
+                15,   // ширина
+                15,   // глубина,
+                15,// этажи
                 3f, // размер куба
                 3.1f, // высота этажа
                 groundTex,
@@ -202,7 +202,7 @@ public class DevGame implements Application {
                         );
                         Vector3f max = new Vector3f(
                                 posX + cubeSize / 2,
-                                offsetY,
+                                offsetY + thickness,
                                 posZ + cubeSize / 2
                         );
                         groundColliders.add(new AABB(min, max));

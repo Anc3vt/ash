@@ -16,6 +16,8 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL20.*;
 
 public class Engine {
+    public static final int TARGET_FPS = 60;
+
     public static Skybox skybox;
     private final LaunchConfig launchConfig;
     private Window window;
@@ -28,13 +30,13 @@ public class Engine {
     private double lastMouseX, lastMouseY;
     private boolean firstMouse = true;
 
-    private final float cameraSpeed = 0.03f;
+    private final float cameraSpeed = 5f;
     private final float mouseSensitivity = 0.1f;
 
     // Engine.java
     private float velocityY = 0.0f;
-    private final float gravity = -0.0005f;
-    private final float jumpStrength = 0.055f;
+    private final float gravity = -58f;
+    private final float jumpStrength = 30f;
     private boolean isGrounded = false;
 
     private GameObject groundObj = null; // объект, на котором стоит игрок
@@ -132,13 +134,19 @@ public class Engine {
         float zNear = 0.01f, zFar = 1000f;
 
 
+        long lastFrameTime = System.nanoTime();
+        long targetFrameTime = 1000000000L / TARGET_FPS;
         while (!window.shouldClose()) {
+            long currentFrameTime = System.nanoTime();
+            float deltaTime = (currentFrameTime - lastFrameTime) / 1_000_000_000.0f;
+            lastFrameTime = currentFrameTime;
+
             // Очистка экрана
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glEnable(GL_DEPTH_TEST);
 
             // Управление камерой/клавиатура/мышь
-            processInput();
+            processInput(deltaTime);
 
             // Шейдер активируем
             shader.use();
@@ -181,6 +189,18 @@ public class Engine {
 
             root.render(ctxRender);
 
+            long endTime = System.nanoTime();
+            long frameTime = endTime - currentFrameTime;
+            long remainingTime = targetFrameTime - frameTime;
+
+            if (remainingTime > 0) {
+                try {
+                    Thread.sleep(remainingTime / 1_000_000L);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
             // === Смена кадров ===
             window.update();
 
@@ -205,20 +225,23 @@ public class Engine {
 
     private final float stepHeight = 0.4f; // максимальная высота, на которую можно "шагнуть"
 
-    private void processInput() {
+    private void processInput(float deltaTime) {
         long win = window.getWindowHandle();
 
+        // направления
         Vector3f front = camera.getFront();
         Vector3f right = front.cross(new Vector3f(0, 1, 0), new Vector3f()).normalize();
 
+        // движение по плоскости
         Vector3f moveDir = new Vector3f();
-
-        // движение WASD
-        if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) moveDir.add(new Vector3f(front).mul(cameraSpeed));
-        if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) moveDir.add(new Vector3f(front).mul(-cameraSpeed));
-        if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) moveDir.add(new Vector3f(right).mul(-cameraSpeed));
-        if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) moveDir.add(new Vector3f(right).mul(cameraSpeed));
-
+        if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS)
+            moveDir.add(new Vector3f(front).mul(cameraSpeed));
+        if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS)
+            moveDir.add(new Vector3f(front).mul(-cameraSpeed));
+        if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS)
+            moveDir.add(new Vector3f(right).mul(-cameraSpeed));
+        if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS)
+            moveDir.add(new Vector3f(right).mul(cameraSpeed));
 
         Vector3f pos = new Vector3f(camera.getPosition());
 
@@ -229,57 +252,47 @@ public class Engine {
         }
 
         // гравитация
-        velocityY += gravity;
+        velocityY += gravity * deltaTime;
         moveDir.y += velocityY;
 
-        // --- обработка столкновений ---
+        // позиция после движения
         Vector3f newPos = new Vector3f(pos);
 
+        // респавн
         if (glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS) {
             newPos.set(0, 60, 0);
             velocityY = 0;
         }
 
-        // X движение
-        newPos.x += moveDir.x;
+        // движение по X
+        newPos.x += moveDir.x * deltaTime;
         if (checkCollision(newPos)) {
-            if (!tryStepUp(newPos, pos)) {
-                newPos.x = pos.x;
-            }
+            if (!tryStepUp(newPos, pos)) newPos.x = pos.x;
         }
 
-        // Z движение
-        newPos.z += moveDir.z;
+        // движение по Z
+        newPos.z += moveDir.z * deltaTime;
         if (checkCollision(newPos)) {
-            if (!tryStepUp(newPos, pos)) {
-                newPos.z = pos.z;
-            }
+            if (!tryStepUp(newPos, pos)) newPos.z = pos.z;
         }
 
-        // Y движение
-        newPos.y += moveDir.y;
-
-// проверяем пересечение с потолком/стеной
+        // движение по Y
+        newPos.y += moveDir.y * deltaTime;
         if (checkCollision(newPos)) {
-            if (moveDir.y < 0) {
-                isGrounded = true;
-            }
+            if (moveDir.y < 0) isGrounded = true;
             velocityY = 0;
             newPos.y = pos.y;
         } else {
-            // проверяем, есть ли пол под ногами
+            // проверяем, есть ли пол
             Float groundY = findGroundBelow(newPos);
             if (groundY != null && newPos.y <= groundY + 0.01f) {
-                // стоим на плитке
                 newPos.y = groundY;
                 isGrounded = true;
                 velocityY = 0;
             } else {
-                // свободное падение
                 isGrounded = false;
             }
         }
-
 
         camera.getPosition().set(newPos);
 
@@ -288,6 +301,7 @@ public class Engine {
             glfwSetWindowShouldClose(win, true);
         }
     }
+
 
     private Float findGroundBelow(Vector3f pos) {
         float closest = Float.NEGATIVE_INFINITY;

@@ -243,7 +243,9 @@ public class Engine {
         if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS)
             moveDir.add(new Vector3f(right).mul(cameraSpeed));
 
-        Vector3f pos = new Vector3f(camera.getPosition());
+
+        Vector3f position = camera.getPosition();
+        Vector3f pos = new Vector3f(position.x, position.y - 2, position.z);
 
         // прыжок
         if (glfwGetKey(win, GLFW_KEY_SPACE) == GLFW_PRESS && isGrounded) {
@@ -294,7 +296,7 @@ public class Engine {
             }
         }
 
-        camera.getPosition().set(newPos);
+        camera.getPosition().set(newPos.x, newPos.y + 2, newPos.z);
 
         // выход
         if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS) {

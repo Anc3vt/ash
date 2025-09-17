@@ -72,8 +72,8 @@ public class DevGame implements Application {
                 15,   // ширина
                 15,   // глубина,
                 15,// этажи
-                3f, // размер куба
-                4f, // высота этажа
+                5f, // размер куба
+                5.3f, // высота этажа
                 groundTex,
                 wallTex
         );

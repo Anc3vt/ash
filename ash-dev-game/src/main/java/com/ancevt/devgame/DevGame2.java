@@ -14,14 +14,13 @@ import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 import static org.lwjgl.opengl.GL20.glGetUniformLocation;
 import static org.lwjgl.opengl.GL20.glUniform1i;
 import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
 import static org.lwjgl.opengl.GL20C.GL_VERTEX_SHADER;
 
-public class DevGame implements Application {
+public class DevGame2 implements Application {
 
 
     public static void main(String[] args) {
@@ -31,7 +30,7 @@ public class DevGame implements Application {
                         .height(1000)
                         .title("Ash Dev")
                         .build()
-        ).start(new DevGame());
+        ).start(new DevGame2());
     }
 
     private EngineContext ctx;
@@ -74,91 +73,92 @@ public class DevGame implements Application {
         atlas.debugSave("test_atlas.png");
 
 
-        // === Генерация многоэтажного лабиринта ===
-        generateMultiFloorMaze(
-                20,   // ширина X
-                20,   // ширина Z
-                20,
-                6,   // размер куба
-                atlas // передаём атлас
-        );
+        generateHall(5, 5, 5, 6, atlas);
     }
 
-
-    public void generateMultiFloorMaze(int sizeX, int sizeZ, int sizeY, float cubeSize, Atlas atlas) {
-        Random rand = new Random();
-
+    public void generateHall(int sizeX, int sizeZ, int sizeY, float cubeSize, Atlas atlas) {
         List<float[]> chunks = new ArrayList<>();
         List<AABB> colliders = new ArrayList<>();
 
         UVRect wallUV = atlas.getUV("wall");
         UVRect groundUV = atlas.getUV("ground");
+        UVRect tigerUV = atlas.getUV("sq-tiger");
 
         float groundThickness = 0.1f;
 
-        float wallDensity = 0.4f;   // вероятность появления стены (40%)
-        float holeChance = 0.3f;    // вероятность дыры в полу (30%)
+        // === Пол ===
+        for (int x = 0; x < sizeX; x++) {
+            for (int z = 0; z < sizeZ; z++) {
+                float[] floorVerts = MeshFactory.createFloorTile(cubeSize, groundThickness, groundUV);
+                Matrix4f transform = new Matrix4f()
+                        .translate(x * cubeSize, -groundThickness / 2f, z * cubeSize);
+
+                chunks.add(TransformUtil.transformVertices(floorVerts, transform));
+
+                colliders.add(new AABB(
+                        new Vector3f(x * cubeSize - cubeSize / 2f, -groundThickness, z * cubeSize - cubeSize / 2f),
+                        new Vector3f(x * cubeSize + cubeSize / 2f, 0, z * cubeSize + cubeSize / 2f)
+                ));
+            }
+        }
+
+        // === Потолок ===
+        for (int x = 0; x < sizeX; x++) {
+            for (int z = 0; z < sizeZ; z++) {
+                float[] floorVerts = MeshFactory.createFloorTile(cubeSize, groundThickness, groundUV);
+                Matrix4f transform = new Matrix4f()
+                        .translate(x * cubeSize, sizeY * cubeSize + groundThickness / 2f, z * cubeSize)
+                        .rotate((float) Math.PI, 1, 0, 0);
+
+                chunks.add(TransformUtil.transformVertices(floorVerts, transform));
+
+                colliders.add(new AABB(
+                        new Vector3f(x * cubeSize - cubeSize / 2f, sizeY * cubeSize, z * cubeSize - cubeSize / 2f),
+                        new Vector3f(x * cubeSize + cubeSize / 2f, sizeY * cubeSize + groundThickness, z * cubeSize + cubeSize / 2f)
+                ));
+            }
+        }
+
+        // === Стены ===
+        int midY = sizeY / 2;
+        int midX = sizeX / 2;
+        int midZ = sizeZ / 2;
 
         for (int y = 0; y < sizeY; y++) {
             for (int x = 0; x < sizeX; x++) {
                 for (int z = 0; z < sizeZ; z++) {
+                    boolean onBoundary = (x == 0 || x == sizeX - 1 || z == 0 || z == sizeZ - 1);
+                    if (!onBoundary) continue;
 
-                    boolean isWall = rand.nextFloat() < wallDensity;
+                    // === Центр передней стены по Z ===
+                    boolean isTiger = (z == 0 && x == midX && y == midY);
 
-                    if (isWall) {
-                        // === СТЕНА ===
-                        float[] cubeVerts = MeshFactory.createTexturedCube(cubeSize, wallUV);
+                    // === Условие окна (не вырезаем тигра) ===
+                    boolean isWindow = (y == midY && (x % 3 == 0 || z % 3 == 0)) && !isTiger;
+                    if (isWindow) continue;
 
-                        Matrix4f transform = new Matrix4f()
-                                .translate(x * cubeSize, y * cubeSize + cubeSize / 2f, z * cubeSize);
+                    UVRect uv = isTiger ? atlas.getUV("sq-tiger") : wallUV;
 
-                        chunks.add(TransformUtil.transformVertices(cubeVerts, transform));
+                    float[] cubeVerts = MeshFactory.createTexturedCube(cubeSize, uv);
+                    Matrix4f transform = new Matrix4f()
+                            .translate(x * cubeSize, y * cubeSize + cubeSize / 2f, z * cubeSize);
 
-                        colliders.add(new AABB(
-                                new Vector3f(
-                                        x * cubeSize - cubeSize / 2f,
-                                        y * cubeSize,
-                                        z * cubeSize - cubeSize / 2f
-                                ),
-                                new Vector3f(
-                                        x * cubeSize + cubeSize / 2f,
-                                        y * cubeSize + cubeSize,
-                                        z * cubeSize + cubeSize / 2f
-                                )
-                        ));
+                    chunks.add(TransformUtil.transformVertices(cubeVerts, transform));
 
-                    } else {
-                        // === ПОЛ ===
-                        boolean makeHole = (y > 0) && (rand.nextFloat() < holeChance);
+                    colliders.add(new AABB(
+                            new Vector3f(x * cubeSize - cubeSize / 2f, y * cubeSize, z * cubeSize - cubeSize / 2f),
+                            new Vector3f(x * cubeSize + cubeSize / 2f, y * cubeSize + cubeSize, z * cubeSize + cubeSize / 2f)
+                    ));
 
-                        if (!makeHole) {
-                            float[] floorVerts = MeshFactory.createFloorTile(cubeSize, groundThickness, groundUV);
-
-                            Matrix4f transform = new Matrix4f()
-                                    .translate(x * cubeSize, y * cubeSize - groundThickness / 2f, z * cubeSize);
-
-                            chunks.add(TransformUtil.transformVertices(floorVerts, transform));
-
-                            colliders.add(new AABB(
-                                    new Vector3f(
-                                            x * cubeSize - cubeSize / 2f,
-                                            y * cubeSize - groundThickness,
-                                            z * cubeSize - cubeSize / 2f
-                                    ),
-                                    new Vector3f(
-                                            x * cubeSize + cubeSize / 2f,
-                                            y * cubeSize,
-                                            z * cubeSize + cubeSize / 2f
-                                    )
-                            ));
-                        }
+                    if (isTiger) {
+                        System.out.println("🐯 Tiger placed at " + x + "," + y + "," + z);
                     }
-
                 }
             }
         }
 
-        // === Сборка в один меш ===
+
+        // === Сборка меша ===
         int totalLen = chunks.stream().mapToInt(a -> a.length).sum();
         float[] merged = new float[totalLen];
         int pos = 0;
@@ -171,6 +171,7 @@ public class DevGame implements Application {
         MazeNode node = new MazeNode(mesh, atlas.getTextureId(), colliders);
         ctx.getEngine().root.addChild(node);
     }
+
 
 
     private boolean[][] generateMaze(int width, int height) {

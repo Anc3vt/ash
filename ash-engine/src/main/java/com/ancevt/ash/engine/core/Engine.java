@@ -292,6 +292,17 @@ public class Engine {
             velocityY = 0;
         }
 
+        if (glfwGetKey(win, GLFW_KEY_T) == GLFW_PRESS) {
+            newPos.set(10, 10, 10);
+            velocityY = 0;
+        }
+
+        if (glfwGetKey(win, GLFW_KEY_LEFT_ALT) == GLFW_PRESS) {
+            //newPos.set(newPos.x, newPos.y + 0.5f, newPos.z);
+            velocityY += 1f;
+            if(velocityY < 2f) velocityY = 2f;
+        }
+
         camera.getPosition().set(newPos.x, newPos.y + 2, newPos.z);
 
 

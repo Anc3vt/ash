@@ -1,150 +1,83 @@
 package com.ancevt.ash.engine.asset;
 
-import lombok.Getter;
 import org.lwjgl.BufferUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL30C.glGenerateMipmap;
 import static org.lwjgl.stb.STBImage.*;
+import static org.lwjgl.stb.STBImageWrite.stbi_write_png;
 
 public class Atlas {
 
     private final List<ImageData> images = new ArrayList<>();
     private final Map<String, UVRect> uvMap = new HashMap<>();
-    private int atlasWidth = 0;
-    private int atlasHeight = 0;
-    @Getter
     private int textureId = -1;
+    private int atlasWidth;
+    private int atlasHeight;
+    private ByteBuffer atlasBuffer;
 
-    public Atlas addImage(String name, String resourcesPath) {
-        try (InputStream in = Atlas.class.getResourceAsStream(resourcesPath)) {
-            if (in == null) {
-                throw new IOException("Resource not found: " + resourcesPath);
-            }
-            return addImage(name, in);
+    public Atlas addImage(String name, String resourcePath) {
+        try (InputStream in = Atlas.class.getResourceAsStream(resourcePath)) {
+            if (in == null) throw new IOException("Not found: " + resourcePath);
+            byte[] bytes = in.readAllBytes();
+            ByteBuffer buf = BufferUtils.createByteBuffer(bytes.length);
+            buf.put(bytes).flip();
+
+            IntBuffer w = BufferUtils.createIntBuffer(1);
+            IntBuffer h = BufferUtils.createIntBuffer(1);
+            IntBuffer c = BufferUtils.createIntBuffer(1);
+
+            stbi_set_flip_vertically_on_load(true);
+
+            ByteBuffer pixels = stbi_load_from_memory(buf, w, h, c, 4);
+            if (pixels == null) throw new RuntimeException("STB fail: " + stbi_failure_reason());
+
+            images.add(new ImageData(name, pixels, w.get(), h.get()));
         } catch (IOException e) {
-            throw new RuntimeException("Failed to read image from resource: " + resourcesPath, e);
+            throw new RuntimeException("Atlas addImage failed: " + resourcePath, e);
         }
-    }
-
-    public Atlas addImage(String name, InputStream inputStream) {
-        try {
-            byte[] bytes = inputStream.readAllBytes();
-            ByteBuffer buffer = BufferUtils.createByteBuffer(bytes.length);
-            buffer.put(bytes);
-            buffer.flip(); // flip обязательно перед передачей
-            return addImage(name, buffer);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read image from InputStream", e);
-        }
-    }
-
-    public Set<String> getNames() {
-        return Set.copyOf(uvMap.keySet());
-    }
-
-    public Atlas addImage(String name, ByteBuffer imageBuffer) {
-        IntBuffer w = BufferUtils.createIntBuffer(1);
-        IntBuffer h = BufferUtils.createIntBuffer(1);
-        IntBuffer c = BufferUtils.createIntBuffer(1);
-
-        ByteBuffer pixels = stbi_load_from_memory(imageBuffer, w, h, c, 4);
-        if (pixels == null) {
-            throw new RuntimeException("Failed to load image: " + stbi_failure_reason());
-        }
-
-        images.add(new ImageData(name, pixels, w.get(0), h.get(0), 4));
         return this;
     }
 
-    public void build() {
-        int padding = 1; // рамка вокруг каждой текстуры
-        atlasWidth = images.stream().mapToInt(img -> img.width + 2 * padding).max().orElse(0) * 4;
+    public Atlas build() {
+        // складываем по вертикали
+        atlasWidth = images.stream().mapToInt(img -> img.width).max().orElse(0);
+        atlasHeight = images.stream().mapToInt(img -> img.height).sum();
 
-        List<AtlasSpan> skyline = new ArrayList<>();
-        skyline.add(new AtlasSpan(0, 0, atlasWidth));
+        atlasBuffer = BufferUtils.createByteBuffer(atlasWidth * atlasHeight * 4);
 
-        int usedHeight = 0;
-
-        // размещаем
-        for (ImageData img : images) {
-            int wWithPad = img.width + 2 * padding;
-            int hWithPad = img.height + 2 * padding;
-
-            Pos pos = findPosition(skyline, wWithPad, hWithPad);
-            if (pos == null) throw new RuntimeException("Does not fit: " + img.name);
-
-            img.x = pos.x;
-            img.y = pos.y;
-            usedHeight = Math.max(usedHeight, pos.y + hWithPad);
-
-            insertSkyline(skyline, pos.x, pos.y + hWithPad, wWithPad);
-        }
-
-        atlasHeight = usedHeight;
-        ByteBuffer atlasBuffer = BufferUtils.createByteBuffer(atlasWidth * atlasHeight * 4);
-
-        // копируем пиксели + рамки
+        int yOffset = 0;
         for (ImageData img : images) {
             for (int y = 0; y < img.height; y++) {
                 for (int x = 0; x < img.width; x++) {
-                    int srcIndex = (y * img.width + x) * 4;
-                    int dstIndex = ((img.y + padding + y) * atlasWidth + (img.x + padding + x)) * 4;
+                    int src = (y * img.width + x) * 4;
+                    int dst = ((yOffset + y) * atlasWidth + x) * 4;
                     for (int i = 0; i < 4; i++) {
-                        atlasBuffer.put(dstIndex + i, img.pixels.get(srcIndex + i));
+                        atlasBuffer.put(dst + i, img.pixels.get(src + i));
                     }
                 }
             }
+            // считать UV с учётом ширины
+            float u = 0f;
+            float v = (float) yOffset / atlasHeight;
+            float uw = (float) img.width / atlasWidth;
+            float vh = (float) img.height / atlasHeight;
+            uvMap.put(img.name, new UVRect(u, v, uw, vh));
 
-            // рамка сверху и снизу
-            for (int x = 0; x < img.width; x++) {
-                int srcTop = (0 * img.width + x) * 4;
-                int srcBottom = ((img.height - 1) * img.width + x) * 4;
-
-                int dstTop = ((img.y + 0) * atlasWidth + (img.x + padding + x)) * 4;
-                int dstBottom = ((img.y + padding + img.height) * atlasWidth + (img.x + padding + x)) * 4;
-
-                for (int i = 0; i < 4; i++) {
-                    atlasBuffer.put(dstTop + i, img.pixels.get(srcTop + i));
-                    atlasBuffer.put(dstBottom + i, img.pixels.get(srcBottom + i));
-                }
-            }
-
-            // рамка слева и справа
-            for (int y = 0; y < img.height; y++) {
-                int srcLeft = (y * img.width + 0) * 4;
-                int srcRight = (y * img.width + img.width - 1) * 4;
-
-                int dstLeft = ((img.y + padding + y) * atlasWidth + (img.x + 0)) * 4;
-                int dstRight = ((img.y + padding + y) * atlasWidth + (img.x + padding + img.width)) * 4;
-
-                for (int i = 0; i < 4; i++) {
-                    atlasBuffer.put(dstLeft + i, img.pixels.get(srcLeft + i));
-                    atlasBuffer.put(dstRight + i, img.pixels.get(srcRight + i));
-                }
-            }
-
-            // углы (4 шт.)
-            copyCorner(atlasBuffer, img, atlasWidth, padding);
-
-            // UV только для внутренней области (без рамки!)
-            uvMap.put(img.name, new UVRect(
-                    (float) (img.x + padding) / atlasWidth,
-                    (float) (img.y + padding) / atlasHeight,
-                    (float) img.width / atlasWidth,
-                    (float) img.height / atlasHeight
-            ));
-
+            yOffset += img.height;
             stbi_image_free(img.pixels);
         }
 
-        // OpenGL
+        // OpenGL upload
         textureId = glGenTextures();
         glBindTexture(GL_TEXTURE_2D, textureId);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlasWidth, atlasHeight, 0,
@@ -152,126 +85,38 @@ public class Atlas {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glGenerateMipmap(GL_TEXTURE_2D);
+
+        return this;
     }
 
-    // маленький хелпер
-    private void copyCorner(ByteBuffer atlasBuffer, ImageData img, int atlasWidth, int padding) {
-        int w = img.width, h = img.height;
-
-        int srcTL = (0 * w + 0) * 4;
-        int srcTR = (0 * w + w - 1) * 4;
-        int srcBL = ((h - 1) * w + 0) * 4;
-        int srcBR = ((h - 1) * w + (w - 1)) * 4;
-
-        int dstTL = ((img.y + 0) * atlasWidth + (img.x + 0)) * 4;
-        int dstTR = ((img.y + 0) * atlasWidth + (img.x + padding + w)) * 4;
-        int dstBL = ((img.y + padding + h) * atlasWidth + (img.x + 0)) * 4;
-        int dstBR = ((img.y + padding + h) * atlasWidth + (img.x + padding + w)) * 4;
-
-        for (int i = 0; i < 4; i++) {
-            atlasBuffer.put(dstTL + i, img.pixels.get(srcTL + i));
-            atlasBuffer.put(dstTR + i, img.pixels.get(srcTR + i));
-            atlasBuffer.put(dstBL + i, img.pixels.get(srcBL + i));
-            atlasBuffer.put(dstBR + i, img.pixels.get(srcBR + i));
+    public void debugSave(String filePath) {
+        if (atlasBuffer == null) throw new IllegalStateException("Build atlas first");
+        atlasBuffer.rewind();
+        boolean ok = stbi_write_png(filePath, atlasWidth, atlasHeight, 4, atlasBuffer, atlasWidth * 4);
+        if (!ok) {
+            throw new RuntimeException("Failed to save atlas: " + filePath);
         }
-    }
-
-
-// ==== helpers ====
-
-    private Pos findPosition(List<AtlasSpan> skyline, int w, int h) {
-        int bestY = Integer.MAX_VALUE;
-        int bestX = -1;
-
-        for (int i = 0; i < skyline.size(); i++) {
-            int x = skyline.get(i).x;
-            int y = canFit(skyline, i, w, h);
-            if (y >= 0 && (y < bestY || (y == bestY && x < bestX))) {
-                bestY = y;
-                bestX = x;
-            }
-        }
-        if (bestX == -1) return null;
-        return new Pos(bestX, bestY);
-    }
-
-    private int canFit(List<AtlasSpan> skyline, int index, int w, int h) {
-        int x = skyline.get(index).x;
-        int y = skyline.get(index).y;
-        int spaceLeft = w;
-
-        if (x + w > atlasWidth) return -1;
-        int i = index;
-        int maxY = y;
-        while (spaceLeft > 0) {
-            if (i >= skyline.size()) return -1;
-            maxY = Math.max(maxY, skyline.get(i).y);
-            if (maxY + h > atlasHeight + 10000) return -1; // safety
-            spaceLeft -= skyline.get(i).width;
-            i++;
-        }
-        return maxY;
-    }
-
-    private void insertSkyline(List<AtlasSpan> skyline, int x, int y, int w) {
-        skyline.add(new AtlasSpan(x, y, w));
-        skyline.sort(Comparator.comparingInt(s -> s.x));
-        // сливаем барханы
-        for (int i = 0; i < skyline.size() - 1; i++) {
-            AtlasSpan a = skyline.get(i);
-            AtlasSpan b = skyline.get(i + 1);
-            if (a.y == b.y) {
-                a.width += b.width;
-                skyline.remove(i + 1);
-                i--;
-            }
-        }
-    }
-
-    private static class AtlasSpan {
-        int x, y, width;
-
-        AtlasSpan(int x, int y, int width) {
-            this.x = x;
-            this.y = y;
-            this.width = width;
-        }
-    }
-
-    private record Pos(int x, int y) {
-    }
-
-
-    public boolean isReady() {
-        return textureId != -1;
-    }
-
-    public void dispose() {
-        if (textureId != -1) {
-            glDeleteTextures(textureId);
-            textureId = -1;
-        } else {
-            throw new RuntimeException("Texture not created");
-        }
+        System.out.println("Atlas saved to " + filePath);
     }
 
     public UVRect getUV(String name) {
         return uvMap.get(name);
     }
 
+    public int getTextureId() {
+        return textureId;
+    }
 
     private static class ImageData {
-        String name;
-        ByteBuffer pixels;
-        int width, height, channels;
-        int x, y;
+        final String name;
+        final ByteBuffer pixels;
+        final int width, height;
 
-        ImageData(String name, ByteBuffer pixels, int width, int height, int channels) {
+        ImageData(String name, ByteBuffer pixels, int width, int height) {
             this.name = name;
             this.pixels = pixels;
             this.width = width;
             this.height = height;
-            this.channels = channels;
         }
     }
 }

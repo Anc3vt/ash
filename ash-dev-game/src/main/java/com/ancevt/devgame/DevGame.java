@@ -1,8 +1,6 @@
 package com.ancevt.devgame;
 
-import com.ancevt.ash.engine.asset.AssetManager;
-import com.ancevt.ash.engine.asset.OBJModel;
-import com.ancevt.ash.engine.asset.TextureLoader;
+import com.ancevt.ash.engine.asset.*;
 import com.ancevt.ash.engine.core.Application;
 import com.ancevt.ash.engine.core.Engine;
 import com.ancevt.ash.engine.core.EngineContext;
@@ -10,10 +8,13 @@ import com.ancevt.ash.engine.core.LaunchConfig;
 import com.ancevt.ash.engine.render.ShaderProgram;
 import com.ancevt.ash.engine.scene.*;
 import com.ancevt.ash.engine.util.TextLoader;
+import com.ancevt.ash.engine.util.TransformUtil;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import static org.lwjgl.opengl.GL20.glGetUniformLocation;
 import static org.lwjgl.opengl.GL20.glUniform1i;
@@ -62,172 +63,110 @@ public class DevGame implements Application {
 
         Engine.skybox = new Skybox(cubemapTex, skyboxShader);
 
-        // === Текстуры ===
-        int groundTex = assetManager.loadTexture("texture/ground1.png", true);
-        int wallTex = assetManager.loadTexture("texture/wall.png", true);
+        // === Atlas ===
+        Atlas atlas = new Atlas()
+                .addImage("ground", "/texture/ground1.png")
+                .addImage("wall", "/texture/wall.png");
+
+        atlas.build();
 
         // === Генерация многоэтажного лабиринта ===
         generateMultiFloorMaze(
-                ctx,
-                20,   // ширина
-                20,   // глубина,
-                20,// этажи
-                8f, // размер куба
-                8.5f, // высота этажа
-                groundTex,
-                wallTex
+                20,   // ширина X
+                20,   // ширина Z
+                20,
+                6,   // размер куба
+                atlas // передаём атлас
         );
     }
 
 
-    private void generateMultiFloorMaze(
-            EngineContext ctx,
-            int mazeWidth,
-            int mazeDepth,
-            int mazeLevels,
-            float cubeSize,
-            float levelHeight,
-            int groundTex,
-            int wallTex
-    ) {
-        boolean[][][] maze = new boolean[mazeWidth][mazeDepth][mazeLevels];
+    public void generateMultiFloorMaze(int sizeX, int sizeZ, int sizeY, float cubeSize, Atlas atlas) {
+        Random rand = new Random();
 
-        // === Генерация всех уровней ===
-        for (int y = 0; y < mazeLevels; y++) {
-            boolean[][] level = generateMaze(mazeWidth, mazeDepth);
+        List<float[]> chunks = new ArrayList<>();
+        List<AABB> colliders = new ArrayList<>();
 
-            for (int x = 0; x < mazeWidth; x++) {
-                for (int z = 0; z < mazeDepth; z++) {
-                    maze[x][z][y] = level[x][z];
-                }
-            }
+        UVRect wallUV = atlas.getUV("wall");
+        UVRect groundUV = atlas.getUV("ground");
 
-            // === Добавляем много комнат (пустых пространств) ===
-            int roomsCount = 1 + (int)(Math.random() * 3); // 1–3 комнаты на этаж
-            for (int r = 0; r < roomsCount; r++) {
-                int roomX = 1 + (int)(Math.random() * (mazeWidth - 6));
-                int roomZ = 1 + (int)(Math.random() * (mazeDepth - 6));
-                int roomW = 3 + (int)(Math.random() * 5); // ширина 3–7
-                int roomH = 3 + (int)(Math.random() * 5); // глубина 3–7
+        float groundThickness = 0.1f;
 
-                for (int rx = roomX; rx < roomX + roomW && rx < mazeWidth - 1; rx++) {
-                    for (int rz = roomZ; rz < roomZ + roomH && rz < mazeDepth - 1; rz++) {
-                        maze[rx][rz][y] = false;
-                    }
-                }
-            }
+        float wallDensity = 0.4f;   // вероятность появления стены (40%)
+        float holeChance = 0.3f;    // вероятность дыры в полу (30%)
 
-            // === Добавляем атриумы (многоуровневые пустоты) ===
-            if (Math.random() < 0.4 && y < mazeLevels - 2) { // чаще (40%)
-                int atriumX = 2 + (int)(Math.random() * (mazeWidth - 6));
-                int atriumZ = 2 + (int)(Math.random() * (mazeDepth - 6));
-                int atriumW = 2 + (int)(Math.random() * 5); // ширина 2–6
-                int atriumH = 2 + (int)(Math.random() * 5); // глубина 2–6
-                int atriumLevels = 2 + (int)(Math.random() * 3); // высота 2–4 этажей
+        for (int y = 0; y < sizeY; y++) {
+            for (int x = 0; x < sizeX; x++) {
+                for (int z = 0; z < sizeZ; z++) {
 
-                for (int ay = y; ay < y + atriumLevels && ay < mazeLevels; ay++) {
-                    for (int ax = atriumX; ax < atriumX + atriumW && ax < mazeWidth - 1; ax++) {
-                        for (int az = atriumZ; az < atriumZ + atriumH && az < mazeDepth - 1; az++) {
-                            maze[ax][az][ay] = false;
-                        }
-                    }
-                }
-            }
+                    boolean isWall = rand.nextFloat() < wallDensity;
 
-            // === Добавляем лестницу (пробиваем проход между этажами) ===
-            if (y < mazeLevels - 1) {
-                int stairX = 1 + (int) (Math.random() * (mazeWidth - 2));
-                int stairZ = 1 + (int) (Math.random() * (mazeDepth - 2));
-                maze[stairX][stairZ][y] = false;
-                maze[stairX][stairZ][y + 1] = false;
-            }
-        }
-
-        // === Билдеры для объединённой геометрии ===
-        MeshBuilder wallBuilder = new MeshBuilder(8);
-        MeshBuilder groundBuilder = new MeshBuilder(8);
-
-        List<AABB> wallColliders = new java.util.ArrayList<>();
-        List<AABB> groundColliders = new java.util.ArrayList<>();
-
-        float holeChance = 0.3f; // шанс дырки в полу
-
-        // === Проходим по всем клеткам ===
-        for (int y = 0; y < mazeLevels; y++) {
-            for (int x = 0; x < mazeWidth; x++) {
-                for (int z = 0; z < mazeDepth; z++) {
-
-                    float posX = x * cubeSize - mazeWidth * cubeSize / 2;
-                    float posY = y * levelHeight;
-                    float posZ = z * cubeSize - mazeDepth * cubeSize / 2;
-
-                    // === Стены ===
-                    if (maze[x][z][y]) {
-                        wallBuilder.addMesh(
-                                MeshFactory.createTexturedCubeMesh(cubeSize),
-                                posX,
-                                posY + cubeSize / 2, // центр куба
-                                posZ
-                        );
-
-                        Vector3f min = new Vector3f(
-                                posX - cubeSize / 2,
-                                posY,
-                                posZ - cubeSize / 2
-                        );
-                        Vector3f max = new Vector3f(
-                                posX + cubeSize / 2,
-                                posY + cubeSize,
-                                posZ + cubeSize / 2
-                        );
-                        wallColliders.add(new AABB(min, max));
-                    }
-
-                    // === Пол ===
-                    if (Math.random() > holeChance) {
-                        float thickness = cubeSize * 0.1f;
-
-                        // === случайные углы наклона ===
-                        float rx = (float) Math.toRadians((Math.random() - 0.5) * 10); // -5°..+5°
-                        float rz = (float) Math.toRadians((Math.random() - 0.5) * 10);
+                    if (isWall) {
+                        // === СТЕНА ===
+                        float[] cubeVerts = MeshFactory.createTexturedCube(cubeSize, wallUV);
 
                         Matrix4f transform = new Matrix4f()
-                                .translate(posX, posY - thickness / 2, posZ)
-                                .rotateX(rx)
-                                .rotateZ(rz);
+                                .translate(x * cubeSize, y * cubeSize + cubeSize / 2f, z * cubeSize);
 
-                        groundBuilder.addMeshTransformed(
-                                MeshFactory.createFloorTileMesh(cubeSize, thickness),
-                                transform
-                        );
+                        chunks.add(TransformUtil.transformVertices(cubeVerts, transform));
 
-                        Vector3f min = new Vector3f(
-                                posX - cubeSize / 2,
-                                posY - thickness,
-                                posZ - cubeSize / 2
-                        );
-                        Vector3f max = new Vector3f(
-                                posX + cubeSize / 2,
-                                posY + thickness,
-                                posZ + cubeSize / 2
-                        );
-                        groundColliders.add(new AABB(min, max));
+                        colliders.add(new AABB(
+                                new Vector3f(
+                                        x * cubeSize - cubeSize / 2f,
+                                        y * cubeSize,
+                                        z * cubeSize - cubeSize / 2f
+                                ),
+                                new Vector3f(
+                                        x * cubeSize + cubeSize / 2f,
+                                        y * cubeSize + cubeSize,
+                                        z * cubeSize + cubeSize / 2f
+                                )
+                        ));
+
+                    } else {
+                        // === ПОЛ ===
+                        boolean makeHole = (y > 0) && (rand.nextFloat() < holeChance);
+
+                        if (!makeHole) {
+                            float[] floorVerts = MeshFactory.createFloorTile(cubeSize, groundThickness, groundUV);
+
+                            Matrix4f transform = new Matrix4f()
+                                    .translate(x * cubeSize, y * cubeSize - groundThickness / 2f, z * cubeSize);
+
+                            chunks.add(TransformUtil.transformVertices(floorVerts, transform));
+
+                            colliders.add(new AABB(
+                                    new Vector3f(
+                                            x * cubeSize - cubeSize / 2f,
+                                            y * cubeSize - groundThickness,
+                                            z * cubeSize - cubeSize / 2f
+                                    ),
+                                    new Vector3f(
+                                            x * cubeSize + cubeSize / 2f,
+                                            y * cubeSize,
+                                            z * cubeSize + cubeSize / 2f
+                                    )
+                            ));
+                        }
                     }
+
                 }
             }
         }
 
-        // === Финализируем меши ===
-        Mesh wallMesh = wallBuilder.build();
-        Mesh groundMesh = groundBuilder.build();
+        // === Сборка в один меш ===
+        int totalLen = chunks.stream().mapToInt(a -> a.length).sum();
+        float[] merged = new float[totalLen];
+        int pos = 0;
+        for (float[] arr : chunks) {
+            System.arraycopy(arr, 0, merged, pos, arr.length);
+            pos += arr.length;
+        }
 
-        MazeNode mazeNode = new MazeNode(wallMesh, wallTex, wallColliders);
-        MazeNode groundNode = new MazeNode(groundMesh, groundTex, groundColliders);
-
-        ctx.getEngine().root.addChild(groundNode);
-        ctx.getEngine().root.addChild(mazeNode);
+        Mesh mesh = new Mesh(merged, 8);
+        MazeNode node = new MazeNode(mesh, atlas.getTextureId(), colliders);
+        ctx.getEngine().root.addChild(node);
     }
-
 
 
     private boolean[][] generateMaze(int width, int height) {

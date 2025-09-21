@@ -10,6 +10,7 @@ import java.nio.IntBuffer;
 import java.util.*;
 
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL30C.glGenerateMipmap;
 import static org.lwjgl.stb.STBImage.*;
 
 public class Atlas {
@@ -63,61 +64,118 @@ public class Atlas {
     }
 
     public void build() {
-        // Реши, какая у тебя максимально допустимая ширина атласа
-        atlasWidth = images.stream().mapToInt(img -> img.width).max().orElse(0) * 4;
+        int padding = 1; // рамка вокруг каждой текстуры
+        atlasWidth = images.stream().mapToInt(img -> img.width + 2 * padding).max().orElse(0) * 4;
 
-        // Skyline: список "барханов" (x, y, width)
         List<AtlasSpan> skyline = new ArrayList<>();
         skyline.add(new AtlasSpan(0, 0, atlasWidth));
 
         int usedHeight = 0;
 
-        // Упаковка
+        // размещаем
         for (ImageData img : images) {
-            // ищем позицию, где картинка влезет
-            Pos pos = findPosition(skyline, img.width, img.height);
-            if (pos == null) {
-                throw new RuntimeException("Does not fit: " + img.name);
-            }
+            int wWithPad = img.width + 2 * padding;
+            int hWithPad = img.height + 2 * padding;
+
+            Pos pos = findPosition(skyline, wWithPad, hWithPad);
+            if (pos == null) throw new RuntimeException("Does not fit: " + img.name);
 
             img.x = pos.x;
             img.y = pos.y;
-            usedHeight = Math.max(usedHeight, pos.y + img.height);
+            usedHeight = Math.max(usedHeight, pos.y + hWithPad);
 
-            // обновляем skyline
-            insertSkyline(skyline, pos.x, pos.y + img.height, img.width);
+            insertSkyline(skyline, pos.x, pos.y + hWithPad, wWithPad);
         }
 
         atlasHeight = usedHeight;
         ByteBuffer atlasBuffer = BufferUtils.createByteBuffer(atlasWidth * atlasHeight * 4);
 
-        // рисуем всё в буфер
+        // копируем пиксели + рамки
         for (ImageData img : images) {
             for (int y = 0; y < img.height; y++) {
                 for (int x = 0; x < img.width; x++) {
                     int srcIndex = (y * img.width + x) * 4;
-                    int dstIndex = ((img.y + y) * atlasWidth + (img.x + x)) * 4;
+                    int dstIndex = ((img.y + padding + y) * atlasWidth + (img.x + padding + x)) * 4;
                     for (int i = 0; i < 4; i++) {
                         atlasBuffer.put(dstIndex + i, img.pixels.get(srcIndex + i));
                     }
                 }
             }
+
+            // рамка сверху и снизу
+            for (int x = 0; x < img.width; x++) {
+                int srcTop = (0 * img.width + x) * 4;
+                int srcBottom = ((img.height - 1) * img.width + x) * 4;
+
+                int dstTop = ((img.y + 0) * atlasWidth + (img.x + padding + x)) * 4;
+                int dstBottom = ((img.y + padding + img.height) * atlasWidth + (img.x + padding + x)) * 4;
+
+                for (int i = 0; i < 4; i++) {
+                    atlasBuffer.put(dstTop + i, img.pixels.get(srcTop + i));
+                    atlasBuffer.put(dstBottom + i, img.pixels.get(srcBottom + i));
+                }
+            }
+
+            // рамка слева и справа
+            for (int y = 0; y < img.height; y++) {
+                int srcLeft = (y * img.width + 0) * 4;
+                int srcRight = (y * img.width + img.width - 1) * 4;
+
+                int dstLeft = ((img.y + padding + y) * atlasWidth + (img.x + 0)) * 4;
+                int dstRight = ((img.y + padding + y) * atlasWidth + (img.x + padding + img.width)) * 4;
+
+                for (int i = 0; i < 4; i++) {
+                    atlasBuffer.put(dstLeft + i, img.pixels.get(srcLeft + i));
+                    atlasBuffer.put(dstRight + i, img.pixels.get(srcRight + i));
+                }
+            }
+
+            // углы (4 шт.)
+            copyCorner(atlasBuffer, img, atlasWidth, padding);
+
+            // UV только для внутренней области (без рамки!)
             uvMap.put(img.name, new UVRect(
-                    (float) img.x / atlasWidth,
-                    (float) img.y / atlasHeight,
+                    (float) (img.x + padding) / atlasWidth,
+                    (float) (img.y + padding) / atlasHeight,
                     (float) img.width / atlasWidth,
                     (float) img.height / atlasHeight
             ));
+
             stbi_image_free(img.pixels);
         }
 
         // OpenGL
         textureId = glGenTextures();
         glBindTexture(GL_TEXTURE_2D, textureId);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlasWidth, atlasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlasBuffer);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlasWidth, atlasHeight, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, atlasBuffer);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glGenerateMipmap(GL_TEXTURE_2D);
     }
+
+    // маленький хелпер
+    private void copyCorner(ByteBuffer atlasBuffer, ImageData img, int atlasWidth, int padding) {
+        int w = img.width, h = img.height;
+
+        int srcTL = (0 * w + 0) * 4;
+        int srcTR = (0 * w + w - 1) * 4;
+        int srcBL = ((h - 1) * w + 0) * 4;
+        int srcBR = ((h - 1) * w + (w - 1)) * 4;
+
+        int dstTL = ((img.y + 0) * atlasWidth + (img.x + 0)) * 4;
+        int dstTR = ((img.y + 0) * atlasWidth + (img.x + padding + w)) * 4;
+        int dstBL = ((img.y + padding + h) * atlasWidth + (img.x + 0)) * 4;
+        int dstBR = ((img.y + padding + h) * atlasWidth + (img.x + padding + w)) * 4;
+
+        for (int i = 0; i < 4; i++) {
+            atlasBuffer.put(dstTL + i, img.pixels.get(srcTL + i));
+            atlasBuffer.put(dstTR + i, img.pixels.get(srcTR + i));
+            atlasBuffer.put(dstBL + i, img.pixels.get(srcBL + i));
+            atlasBuffer.put(dstBR + i, img.pixels.get(srcBR + i));
+        }
+    }
+
 
 // ==== helpers ====
 

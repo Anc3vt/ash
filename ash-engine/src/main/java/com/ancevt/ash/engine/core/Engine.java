@@ -288,7 +288,7 @@ public class Engine {
 
         // респавн
         if (glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS) {
-            newPos.set(Math.random() * 40, Math.random() * 50, Math.random() * 40);
+            newPos.set(Math.random() * 40, 130, Math.random() * 40);
             velocityY = 0;
         }
 

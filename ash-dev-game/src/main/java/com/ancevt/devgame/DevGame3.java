@@ -23,7 +23,7 @@ import static org.lwjgl.opengl.GL20.glUniform1i;
 import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
 import static org.lwjgl.opengl.GL20C.GL_VERTEX_SHADER;
 
-public class DevGame2 implements Application {
+public class DevGame3 implements Application {
 
 
     public static void main(String[] args) {
@@ -33,7 +33,7 @@ public class DevGame2 implements Application {
                         .height(1000)
                         .title("Ash Dev")
                         .build()
-        ).start(new DevGame2());
+        ).start(new DevGame3());
     }
 
     private EngineContext ctx;
@@ -72,78 +72,11 @@ public class DevGame2 implements Application {
                 .addImage("sq-tiger", "/texture/sq-tiger.png")
                 .build();
 
+
         atlas.debugSave("test_atlas.png");
 
-        generateLevel(atlas);
+        new LevelShowcase(ctx).build(atlas, 6f);
     }
-
-    private void generateLevel(Atlas atlas) {
-        // Центральный зал
-        generateHall(10, 10, 4, 6, atlas, 0, 0, 0);
-
-        // Два боковых крыла
-        generateHall(6, 20, 3, 6, atlas, 15 * 6, 0, 0);
-        generateHall(6, 20, 3, 6, atlas, -15 * 6, 0, 0);
-
-        // Коридоры на север/юг
-        generateHall(4, 12, 3, 6, atlas, 0, 0, 15 * 6);
-        generateHall(4, 12, 3, 6, atlas, 0, 0, -15 * 6);
-
-        // Колонны вокруг центрального зала
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                if (x == 0 && z == 0) continue;
-                placeColumn(atlas, x * 20, 0, z * 20);
-            }
-        }
-
-        // Шахматный пол в центре
-        placeChessFloor(atlas, 10, 10, 6, 0, 0, 0);
-    }
-
-    private void placeColumn(Atlas atlas, float x, float y, float z) {
-        UVRect wallUV = atlas.getUV("wall");
-        float cubeSize = 2f;
-        for (int i = 0; i < 6; i++) {
-            float[] cube = MeshFactory.createTexturedCube(cubeSize, wallUV);
-            Matrix4f transform = new Matrix4f().translate(x, y + i * cubeSize + cubeSize / 2, z);
-            float[] verts = TransformUtil.transformVertices(cube, transform);
-            Mesh mesh = new Mesh(verts, 8);
-            MazeNode node = new MazeNode(mesh, atlas.getTextureId(), List.of(
-                    new AABB(new Vector3f(x - cubeSize/2, y+i*cubeSize, z - cubeSize/2),
-                            new Vector3f(x + cubeSize/2, y+(i+1)*cubeSize, z + cubeSize/2))
-            ));
-            ctx.getEngine().root.addChild(node);
-        }
-    }
-
-    private void placeChessFloor(Atlas atlas, int sizeX, int sizeZ, float tileSize,
-                                 float offsetX, float offsetY, float offsetZ) {
-        UVRect groundUV = atlas.getUV("ground");
-        UVRect wallUV = atlas.getUV("wall"); // вторая текстура для контраста
-
-        for (int x = 0; x < sizeX; x++) {
-            for (int z = 0; z < sizeZ; z++) {
-                boolean dark = (x + z) % 2 == 0;
-                UVRect uv = dark ? groundUV : wallUV;
-                float[] floorVerts = MeshFactory.createFloorTile(tileSize, 0.1f, uv);
-                Matrix4f transform = new Matrix4f().translate(offsetX + x * tileSize, offsetY, offsetZ + z * tileSize);
-                float[] verts = TransformUtil.transformVertices(floorVerts, transform);
-                Mesh mesh = new Mesh(verts, 8);
-                ctx.getEngine().root.addChild(new MazeNode(mesh, atlas.getTextureId(), List.of()));
-            }
-        }
-    }
-
-    private void placeCube(Atlas atlas, String tex, float x, float y, float z) {
-        UVRect uv = atlas.getUV(tex);
-        float[] verts = MeshFactory.createTexturedCube(6, uv);
-        Mesh mesh = new Mesh(verts, 8);
-        GameObjectNode node = new GameObjectNode(mesh, atlas.getTextureId());
-        node.setPosition(x, y, z);
-        ctx.getEngine().root.addChild(node);
-    }
-
 
     public void generateHall(int sizeX, int sizeZ, int sizeY, float cubeSize, Atlas atlas,
                              float offsetX, float offsetY, float offsetZ) {
@@ -259,7 +192,6 @@ public class DevGame2 implements Application {
         MazeNode node = new MazeNode(mesh, atlas.getTextureId(), colliders);
         ctx.getEngine().root.addChild(node);
     }
-
 
 
     @Override

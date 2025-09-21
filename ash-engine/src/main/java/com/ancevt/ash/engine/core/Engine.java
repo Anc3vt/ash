@@ -112,7 +112,7 @@ public class Engine {
         mainLight = new Light(
                 new Vector3f(0.0f, 0.0f, 0.0f),
                 new Vector3f(1.0f, 1.0f, 1.0f),
-                10.0f
+                0.2f
         );
 
     }
@@ -164,6 +164,8 @@ public class Engine {
                 glUniformMatrix4fv(viewLoc, false, view.get(stack.mallocFloat(16)));
             }
 
+            mainLight.getPosition().set(camera.getPosition());
+
 // === Источник света ===
             int lightPosLoc = glGetUniformLocation(shader.getId(), "lightPos");
             int viewPosLoc = glGetUniformLocation(shader.getId(), "viewPos");
@@ -188,7 +190,6 @@ public class Engine {
             }
 
             RenderContext ctxRender = new RenderContext(shader, camera, projection);
-            //ctxRender.applyLight(mainLight);
             root.render(ctxRender);
 
             long endTime = System.nanoTime();
@@ -301,7 +302,7 @@ public class Engine {
 
         if (glfwGetKey(win, GLFW_KEY_LEFT_ALT) == GLFW_PRESS) {
             velocityY += 1f;
-            if(velocityY < 2f) velocityY = 2f;
+            if (velocityY < 2f) velocityY = 2f;
         }
 
         if (glfwGetKey(win, GLFW_KEY_1) == GLFW_PRESS) {
@@ -322,16 +323,14 @@ public class Engine {
         float lightSpeed = 20f * deltaTime; // скорость движения света
         Vector3f lightPos = mainLight.getPosition();
 
-        if (glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS)  lightPos.x -= lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS) lightPos.x -= lightSpeed;
         if (glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS) lightPos.x += lightSpeed;
-        if (glfwGetKey(win, GLFW_KEY_UP) == GLFW_PRESS)    lightPos.z -= lightSpeed;
-        if (glfwGetKey(win, GLFW_KEY_DOWN) == GLFW_PRESS)  lightPos.z += lightSpeed;
-        if (glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS)   lightPos.y += lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_UP) == GLFW_PRESS) lightPos.z -= lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_DOWN) == GLFW_PRESS) lightPos.z += lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS) lightPos.y += lightSpeed;
         if (glfwGetKey(win, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) lightPos.y -= lightSpeed;
 
         mainLight.setPosition(lightPos);
-
-
 
 
         // выход

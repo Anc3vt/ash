@@ -228,22 +228,16 @@ public class Engine {
     private void processInput(float deltaTime) {
         long win = window.getWindowHandle();
 
-
-
         // направления
         Vector3f front = camera.getFront();
         Vector3f right = front.cross(new Vector3f(0, 1, 0), new Vector3f()).normalize();
 
         // движение по плоскости
         Vector3f moveDir = new Vector3f();
-        if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS)
-            moveDir.add(new Vector3f(front).mul(cameraSpeed));
-        if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS)
-            moveDir.add(new Vector3f(front).mul(-cameraSpeed));
-        if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS)
-            moveDir.add(new Vector3f(right).mul(-cameraSpeed));
-        if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS)
-            moveDir.add(new Vector3f(right).mul(cameraSpeed));
+        if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) moveDir.add(new Vector3f(front).mul(cameraSpeed));
+        if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) moveDir.add(new Vector3f(front).mul(-cameraSpeed));
+        if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) moveDir.add(new Vector3f(right).mul(-cameraSpeed));
+        if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) moveDir.add(new Vector3f(right).mul(cameraSpeed));
 
 
         Vector3f position = camera.getPosition();
@@ -262,8 +256,6 @@ public class Engine {
         // позиция после движения
         Vector3f newPos = new Vector3f(pos);
 
-
-
         // движение по X
         newPos.x += moveDir.x * deltaTime;
         if (checkCollision(newPos)) {
@@ -275,7 +267,6 @@ public class Engine {
         if (checkCollision(newPos)) {
             if (!tryStepUp(newPos, pos, moveDir)) newPos.z = pos.z;
         }
-
 
         // движение по Y
         newPos.y += moveDir.y * deltaTime;
@@ -302,8 +293,6 @@ public class Engine {
         }
 
         camera.getPosition().set(newPos.x, newPos.y + 2, newPos.z);
-
-
 
 
         // выход
@@ -354,7 +343,6 @@ public class Engine {
 
         return false;
     }
-
 
 
     private boolean checkCollision(Vector3f newPos) {

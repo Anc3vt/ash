@@ -37,20 +37,6 @@ public class RenderContext {
         return camera;
     }
 
-    public void applyLight(Light light) {
-        int lightPosLoc = glGetUniformLocation(shader.getId(), "lightPos");
-        int lightColorLoc = glGetUniformLocation(shader.getId(), "lightColor");
-        int viewPosLoc = glGetUniformLocation(shader.getId(), "viewPos");
-
-        Vector3f pos = light.getPosition();
-        Vector3f col = new Vector3f(light.getColor()).mul(light.getIntensity());
-
-        glUniform3f(lightPosLoc, pos.x, pos.y, pos.z);
-        glUniform3f(lightColorLoc, col.x, col.y, col.z);
-
-        Vector3f camPos = camera.getPosition();
-        glUniform3f(viewPosLoc, camPos.x, camPos.y, camPos.z);
-    }
 
 
 

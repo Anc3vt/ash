@@ -1,6 +1,9 @@
 package com.ancevt.devgame;
 
-import com.ancevt.ash.engine.asset.*;
+import com.ancevt.ash.engine.asset.AssetManager;
+import com.ancevt.ash.engine.asset.Atlas;
+import com.ancevt.ash.engine.asset.TextureLoader;
+import com.ancevt.ash.engine.asset.UVRect;
 import com.ancevt.ash.engine.core.Application;
 import com.ancevt.ash.engine.core.Engine;
 import com.ancevt.ash.engine.core.EngineContext;
@@ -73,16 +76,18 @@ public class DevGame2 implements Application {
         atlas.debugSave("test_atlas.png");
 
 
-        generateHall(5, 5, 5, 6, atlas);
+        for (int i = 0; i < 200; i++) {
+            generateHall(5, 5, 3, 6, atlas, i * (5 * 6), i * 2, 0);
+        }
     }
 
-    public void generateHall(int sizeX, int sizeZ, int sizeY, float cubeSize, Atlas atlas) {
+    public void generateHall(int sizeX, int sizeZ, int sizeY, float cubeSize, Atlas atlas,
+                             float offsetX, float offsetY, float offsetZ) {
         List<float[]> chunks = new ArrayList<>();
         List<AABB> colliders = new ArrayList<>();
 
         UVRect wallUV = atlas.getUV("wall");
         UVRect groundUV = atlas.getUV("ground");
-        UVRect tigerUV = atlas.getUV("sq-tiger");
 
         float groundThickness = 0.1f;
 
@@ -91,13 +96,19 @@ public class DevGame2 implements Application {
             for (int z = 0; z < sizeZ; z++) {
                 float[] floorVerts = MeshFactory.createFloorTile(cubeSize, groundThickness, groundUV);
                 Matrix4f transform = new Matrix4f()
-                        .translate(x * cubeSize, -groundThickness / 2f, z * cubeSize);
+                        .translate(offsetX + x * cubeSize,
+                                offsetY - groundThickness / 2f,
+                                offsetZ + z * cubeSize);
 
                 chunks.add(TransformUtil.transformVertices(floorVerts, transform));
 
                 colliders.add(new AABB(
-                        new Vector3f(x * cubeSize - cubeSize / 2f, -groundThickness, z * cubeSize - cubeSize / 2f),
-                        new Vector3f(x * cubeSize + cubeSize / 2f, 0, z * cubeSize + cubeSize / 2f)
+                        new Vector3f(offsetX + x * cubeSize - cubeSize / 2f,
+                                offsetY - groundThickness,
+                                offsetZ + z * cubeSize - cubeSize / 2f),
+                        new Vector3f(offsetX + x * cubeSize + cubeSize / 2f,
+                                offsetY,
+                                offsetZ + z * cubeSize + cubeSize / 2f)
                 ));
             }
         }
@@ -107,14 +118,20 @@ public class DevGame2 implements Application {
             for (int z = 0; z < sizeZ; z++) {
                 float[] floorVerts = MeshFactory.createFloorTile(cubeSize, groundThickness, groundUV);
                 Matrix4f transform = new Matrix4f()
-                        .translate(x * cubeSize, sizeY * cubeSize + groundThickness / 2f, z * cubeSize)
+                        .translate(offsetX + x * cubeSize,
+                                offsetY + sizeY * cubeSize + groundThickness / 2f,
+                                offsetZ + z * cubeSize)
                         .rotate((float) Math.PI, 1, 0, 0);
 
                 chunks.add(TransformUtil.transformVertices(floorVerts, transform));
 
                 colliders.add(new AABB(
-                        new Vector3f(x * cubeSize - cubeSize / 2f, sizeY * cubeSize, z * cubeSize - cubeSize / 2f),
-                        new Vector3f(x * cubeSize + cubeSize / 2f, sizeY * cubeSize + groundThickness, z * cubeSize + cubeSize / 2f)
+                        new Vector3f(offsetX + x * cubeSize - cubeSize / 2f,
+                                offsetY + sizeY * cubeSize,
+                                offsetZ + z * cubeSize - cubeSize / 2f),
+                        new Vector3f(offsetX + x * cubeSize + cubeSize / 2f,
+                                offsetY + sizeY * cubeSize + groundThickness,
+                                offsetZ + z * cubeSize + cubeSize / 2f)
                 ));
             }
         }
@@ -141,22 +158,29 @@ public class DevGame2 implements Application {
 
                     float[] cubeVerts = MeshFactory.createTexturedCube(cubeSize, uv);
                     Matrix4f transform = new Matrix4f()
-                            .translate(x * cubeSize, y * cubeSize + cubeSize / 2f, z * cubeSize);
+                            .translate(offsetX + x * cubeSize,
+                                    offsetY + y * cubeSize + cubeSize / 2f,
+                                    offsetZ + z * cubeSize);
 
                     chunks.add(TransformUtil.transformVertices(cubeVerts, transform));
 
                     colliders.add(new AABB(
-                            new Vector3f(x * cubeSize - cubeSize / 2f, y * cubeSize, z * cubeSize - cubeSize / 2f),
-                            new Vector3f(x * cubeSize + cubeSize / 2f, y * cubeSize + cubeSize, z * cubeSize + cubeSize / 2f)
+                            new Vector3f(offsetX + x * cubeSize - cubeSize / 2f,
+                                    offsetY + y * cubeSize,
+                                    offsetZ + z * cubeSize - cubeSize / 2f),
+                            new Vector3f(offsetX + x * cubeSize + cubeSize / 2f,
+                                    offsetY + y * cubeSize + cubeSize,
+                                    offsetZ + z * cubeSize + cubeSize / 2f)
                     ));
 
                     if (isTiger) {
-                        System.out.println("🐯 Tiger placed at " + x + "," + y + "," + z);
+                        System.out.println("🐯 Tiger placed at " + (offsetX + x * cubeSize) +
+                                "," + (offsetY + y * cubeSize) +
+                                "," + (offsetZ + z * cubeSize));
                     }
                 }
             }
         }
-
 
         // === Сборка меша ===
         int totalLen = chunks.stream().mapToInt(a -> a.length).sum();
@@ -173,74 +197,6 @@ public class DevGame2 implements Application {
     }
 
 
-
-    private boolean[][] generateMaze(int width, int height) {
-        boolean[][] maze = new boolean[width][height];
-
-        // Заполнить всё стенами
-        for (int x = 0; x < width; x++) {
-            for (int z = 0; z < height; z++) {
-                maze[x][z] = true; // стена
-            }
-        }
-
-        // Начало в (1,1)
-        carve(1, 1, maze, width, height);
-
-        return maze;
-    }
-
-    private void carve(int x, int z, boolean[][] maze, int width, int height) {
-        int[] dx = {2, -2, 0, 0};
-        int[] dz = {0, 0, 2, -2};
-
-        Integer[] dirs = {0, 1, 2, 3};
-        java.util.Collections.shuffle(java.util.Arrays.asList(dirs));
-
-        maze[x][z] = false; // пустота
-
-        for (int dir : dirs) {
-            int nx = x + dx[dir];
-            int nz = z + dz[dir];
-
-            if (nx > 0 && nz > 0 && nx < width - 1 && nz < height - 1) {
-                if (maze[nx][nz]) {
-                    maze[x + dx[dir] / 2][z + dz[dir] / 2] = false; // пробить стену
-                    carve(nx, nz, maze, width, height);
-                }
-            }
-        }
-    }
-
-
-    public static GameObject createGround(float size, int textureId, float repeat) {
-        float[] vertices = {
-                -size, 0, -size, 0, 0, 0, 1, 0,
-                size, 0, -size, repeat, 0, 0, 1, 0,
-                size, 0, size, repeat, repeat, 0, 1, 0,
-
-                -size, 0, -size, 0, 0, 0, 1, 0,
-                size, 0, size, repeat, repeat, 0, 1, 0,
-                -size, 0, size, 0, repeat, 0, 1, 0,
-        };
-
-        Mesh mesh = new Mesh(vertices, 8);
-        return new GameObject(mesh, textureId);
-    }
-
-
-    private GameObjectNode createCastle(String filename, float x, float y, float z) {
-        AssetManager assetManager = ctx.getAssetManager();
-
-        OBJModel obj1 = assetManager.loadObj("models/" + filename);
-        int tex1 = assetManager.loadTexture("texture/wall.png", true);
-        GameObjectNode go1 = new GameObjectNode(obj1.mesh, tex1);
-        go1.setPosition(x, y, z);
-
-        go1.setTextureRepeat(5, 5);
-
-        return go1;
-    }
 
     @Override
     public void update() {

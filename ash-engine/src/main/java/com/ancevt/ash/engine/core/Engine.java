@@ -30,13 +30,13 @@ public class Engine {
     private double lastMouseX, lastMouseY;
     private boolean firstMouse = true;
 
-    private final float cameraSpeed = 19f;
+    private float cameraSpeed = 19f;
     private final float mouseSensitivity = 0.1f;
 
     // Engine.java
     private float velocityY = 0.0f;
     private final float gravity = -38f;
-    private final float jumpStrength = 27f;
+    private final float jumpStrength = 26f;
     private boolean isGrounded = false;
 
     private GameObject groundObj = null; // объект, на котором стоит игрок
@@ -110,10 +110,11 @@ public class Engine {
 
 
         mainLight = new Light(
-                new Vector3f(1.2f, 21.0f, 2.0f),
+                new Vector3f(0.0f, 0.0f, 0.0f),
                 new Vector3f(1.0f, 1.0f, 1.0f),
-                1.0f
+                10.0f
         );
+
     }
 
     private EngineContext createContext() {
@@ -131,7 +132,7 @@ public class Engine {
 
         float fov = (float) Math.toRadians(70.0);
         float aspect = (float) launchConfig.getWidth() / (float) launchConfig.getHeight();
-        float zNear = 0.01f, zFar = 1000f;
+        float zNear = 0.01f, zFar = 10000f;
 
 
         long lastFrameTime = System.nanoTime();
@@ -163,15 +164,18 @@ public class Engine {
                 glUniformMatrix4fv(viewLoc, false, view.get(stack.mallocFloat(16)));
             }
 
-            // === Источник света ===
+// === Источник света ===
             int lightPosLoc = glGetUniformLocation(shader.getId(), "lightPos");
             int viewPosLoc = glGetUniformLocation(shader.getId(), "viewPos");
             int lightColorLoc = glGetUniformLocation(shader.getId(), "lightColor");
 
             try (var stack = MemoryStack.stackPush()) {
-                glUniform3fv(lightPosLoc, new float[]{1.2f, 1.0f, 2.0f});
+                Vector3f pos = mainLight.getPosition();
+                Vector3f color = mainLight.getColor();
+
+                glUniform3fv(lightPosLoc, new float[]{pos.x, pos.y, pos.z});
                 glUniform3fv(viewPosLoc, camera.getPosition().get(stack.mallocFloat(3)));
-                glUniform3f(lightColorLoc, 1.0f, 1.0f, 1.0f);
+                glUniform3f(lightColorLoc, color.x, color.y, color.z);
             }
 
             // === Обновление и рендер всего дерева ===
@@ -184,9 +188,7 @@ public class Engine {
             }
 
             RenderContext ctxRender = new RenderContext(shader, camera, projection);
-            ctxRender.applyLight(mainLight);
-            root.render(ctxRender);
-
+            //ctxRender.applyLight(mainLight);
             root.render(ctxRender);
 
             long endTime = System.nanoTime();
@@ -298,12 +300,38 @@ public class Engine {
         }
 
         if (glfwGetKey(win, GLFW_KEY_LEFT_ALT) == GLFW_PRESS) {
-            //newPos.set(newPos.x, newPos.y + 0.5f, newPos.z);
             velocityY += 1f;
             if(velocityY < 2f) velocityY = 2f;
         }
 
+        if (glfwGetKey(win, GLFW_KEY_1) == GLFW_PRESS) {
+            cameraSpeed = 19;
+        }
+
+        if (glfwGetKey(win, GLFW_KEY_2) == GLFW_PRESS) {
+            cameraSpeed = 100;
+        }
+
+        if (glfwGetKey(win, GLFW_KEY_3) == GLFW_PRESS) {
+            cameraSpeed = 1000;
+        }
+
         camera.getPosition().set(newPos.x, newPos.y + 2, newPos.z);
+
+        // === Управление светом ===
+        float lightSpeed = 20f * deltaTime; // скорость движения света
+        Vector3f lightPos = mainLight.getPosition();
+
+        if (glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS)  lightPos.x -= lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS) lightPos.x += lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_UP) == GLFW_PRESS)    lightPos.z -= lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_DOWN) == GLFW_PRESS)  lightPos.z += lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS)   lightPos.y += lightSpeed;
+        if (glfwGetKey(win, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) lightPos.y -= lightSpeed;
+
+        mainLight.setPosition(lightPos);
+
+
 
 
         // выход

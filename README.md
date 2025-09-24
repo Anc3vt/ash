@@ -38,10 +38,9 @@ This is not a game engine clone. It is a personal space to learn **how engines w
 
 ### 📦 Structure
 
-* `src/engine` - Core engine modules (rendering, input, events, assets)
-* `src/game` - Example games, demos, and test scenes
-* `assets/` - Textures, models, shaders, etc.
-* `shaders/` - GLSL shaders (basic phong-like lighting)
+* `d3d3-engine` - Core engine modules (rendering, input, events, assets)
+* `d3d3-dev-game` - Example games, demos, and test scenes
+* `src/main/resources/` - Textures, models, shaders, etc.
 
 ### 🛠 Tech Stack
 
